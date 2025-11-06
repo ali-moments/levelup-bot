@@ -115,7 +115,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 - Default interval: 181 seconds (3 minutes + 1 second)
 
 ### Math Challenge Processing
-- Monitors messages from `@seyed_ali_khamenei_bot` in the target group
+- Monitors messages from `@` in the target group
 - Detects messages containing "چالش" (challenge)
 - Downloads images from challenge messages
 - Uses OCR (Pix2Text) to extract text from images
