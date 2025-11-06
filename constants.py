@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Optional
 from dotenv import load_dotenv
 import os
 
@@ -16,6 +16,9 @@ GROUP_NAME: Final[str] = os.getenv("GROUP_NAME", "کودکسالان سیرک V.
 # Bonus message settings
 BONUS_MESSAGE: Final[str] = "یا زهرا"
 BONUS_INTERVAL: Final[int] = 181  # Seconds between bonus messages (3 minutes + 1 second)
+
+# Message handler settings
+MESSAGE_SENDER_USERNAME: Final[Optional[str]] = os.getenv("MESSAGE_SENDER_USERNAME", "")  # Optional: only process messages from this username (empty = process all)
 
 # Word sender settings
 ENABLE_WORD_SENDING: Final[bool] = os.getenv("ENABLE_WORD_SENDING", "true").lower() in ("true", "1", "yes")  # Enable/disable word sending

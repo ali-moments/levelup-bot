@@ -61,9 +61,12 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    BONUS_MESSAGE=یا زهرا
    BONUS_INTERVAL=181  # Seconds between bonus messages
 
+   # Message handler settings
+   MESSAGE_SENDER_USERNAME=  # Optional: only process challenge/box messages from this username (empty = process all)
+
    # Word sender settings
    ENABLE_WORD_SENDING=true  # Enable/disable word sending (true/false)
-   WORD_SENDER=true  # true for fast mode (900-1100 msg/h), false for slow mode (100-150 msg/h)
+   WORD_SENDER_SLOW_MODE=false  # false for fast mode (900-1100 msg/h), true for slow mode (100-150 msg/h)
    ```
 
 2. **Get Telegram API credentials**:
@@ -106,9 +109,9 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 
 ### Message Sending
 - The bot can send random words from `wordlist.txt` to the configured group (can be disabled via `ENABLE_WORD_SENDING`)
-- When enabled, message rate is controlled by `WORD_SENDER` setting:
-  - `true`: Fast mode (900-1100 messages/hour)
-  - `false`: Slow mode (100-150 messages/hour)
+- When enabled, message rate is controlled by `WORD_SENDER_SLOW_MODE` setting:
+  - `false`: Fast mode (900-1100 messages/hour)
+  - `true`: Slow mode (100-150 messages/hour)
 - Messages are queued and processed by a worker thread to avoid blocking
 - Set `ENABLE_WORD_SENDING=false` to disable word sending entirely (useful if you only want bonus messages, math challenges, or box handling)
 
@@ -118,17 +121,19 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 - Default interval: 181 seconds (3 minutes + 1 second)
 
 ### Math Challenge Processing
-- Monitors messages from `@` in the target group
-- Detects messages containing "چالش" (challenge)
+- Monitors messages in the target group (from all senders by default, or from a specific sender if `MESSAGE_SENDER_USERNAME` is set)
+- Detects messages containing "چالش" (challenge) keyword or messages with photos
 - Downloads images from challenge messages
 - Uses OCR (Pix2Text) to extract text from images
 - Parses math expressions and solves them
 - Replies with the answer
+- Set `MESSAGE_SENDER_USERNAME` in `.env` to only process messages from a specific bot/user
 
 ### Box Message Processing
-- Detects messages containing "جعبه" (box)
+- Detects messages containing "جعبه" (box) in the target group
 - Automatically clicks all inline buttons in the message
 - Handles various button types and structures
+- Respects `MESSAGE_SENDER_USERNAME` setting if configured
 
 ## Project Structure
 

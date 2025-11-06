@@ -92,6 +92,7 @@ from constants import (
     BONUS_INTERVAL,
     ENABLE_WORD_SENDING,
     WORD_SENDER_SLOW_MODE,
+    MESSAGE_SENDER_USERNAME,
 )
 
 # Configure logging
@@ -672,29 +673,57 @@ async def handle_new_message(event):
     try:
         # Check if message is from the target group
         if not group_entity or event.chat_id != group_entity.id:
+            logger.debug(f"Message not from target group. Chat ID: {event.chat_id}, Group ID: {group_entity.id if group_entity else None}")
             return
         
-        # Check if message is from @seyed_ali_khamenei_bot
+        # Get sender information
         sender = await event.get_sender()
-        if not sender or (hasattr(sender, 'username') and sender.username != 'seyed_ali_khamenei_bot'):
-            return
+        sender_username = None
+        if sender:
+            sender_username = getattr(sender, 'username', None)
+            sender_id = getattr(sender, 'id', None)
+            logger.debug(f"Message from sender: username={sender_username}, id={sender_id}")
+        else:
+            logger.debug("Message has no sender information")
         
+        # Check if we should filter by sender username
+        if MESSAGE_SENDER_USERNAME:
+            # Only process messages from the specified username
+            if not sender_username or sender_username != MESSAGE_SENDER_USERNAME:
+                logger.debug(f"Message not from required sender. Expected: {MESSAGE_SENDER_USERNAME}, Got: {sender_username}")
+                return
+            logger.info(f"Message from required sender: {sender_username}")
+        
+        # Get message text (check both message text and caption for media messages)
         message_text = event.message.message or ""
+        if not message_text and hasattr(event.message, 'raw_text'):
+            message_text = event.message.raw_text or ""
         
-        # Check for "چالش" (challenge)
-        if "چالش" in message_text:
-            logger.info("Found challenge message, processing...")
+        logger.debug(f"Message text: {message_text[:100] if message_text else '(empty)'}...")  # Log first 100 chars
+        
+        # Check for "چالش" (challenge) - can be in text or message might have photo
+        has_challenge_keyword = "چالش" in message_text
+        has_photo = bool(event.message.photo) or (hasattr(event.message, 'document') and event.message.document)
+        
+        # Process challenge if keyword is present, or if it's a photo (challenges are typically photos with math problems)
+        if has_challenge_keyword:
+            logger.info(f"Found challenge message (keyword detected) from {sender_username or 'unknown'}, processing...")
+            # Process in background task to not block other operations
+            asyncio.create_task(process_math_challenge(event.message))
+        elif has_photo:
+            # Also process photos as they might be challenge images without the keyword in text
+            logger.info(f"Found potential challenge message (photo detected) from {sender_username or 'unknown'}, processing...")
             # Process in background task to not block other operations
             asyncio.create_task(process_math_challenge(event.message))
         
         # Check for "جعبه" (box)
-        elif "جعبه" in message_text:
-            logger.info("Found box message, processing inline buttons...")
+        if "جعبه" in message_text:
+            logger.info(f"Found box message from {sender_username or 'unknown'}, processing inline buttons...")
             # Process in background task to not block other operations
             asyncio.create_task(process_box_message(event.message))
             
     except Exception as e:
-        logger.error(f"Error handling new message: {e}")
+        logger.error(f"Error handling new message: {e}", exc_info=True)
 
 
 async def main_loop():
@@ -746,75 +775,131 @@ async def main():
     """Main async function."""
     global running, wordlist, client, group_entity, shutdown_event, worker_thread
     
+    # Print startup banner
+    logger.info("=" * 60)
+    logger.info("🚀 LevelUp Bot - Starting...")
+    logger.info("=" * 60)
+    
+    # Print configuration summary
+    logger.info("📋 Configuration Summary:")
+    logger.info(f"   • Word Sending: {'✅ Enabled' if ENABLE_WORD_SENDING else '❌ Disabled'}")
+    if ENABLE_WORD_SENDING:
+        mode = "Slow (100-150 msg/h)" if WORD_SENDER_SLOW_MODE else "Fast (900-1100 msg/h)"
+        logger.info(f"   • Word Sender Mode: {mode}")
+    logger.info(f"   • Bonus Messages: ✅ Enabled (every {BONUS_INTERVAL}s)")
+    logger.info(f"   • Math Challenges: ✅ Enabled")
+    logger.info(f"   • Box Messages: ✅ Enabled")
+    if MESSAGE_SENDER_USERNAME:
+        logger.info(f"   • Message Filter: @{MESSAGE_SENDER_USERNAME}")
+    else:
+        logger.info(f"   • Message Filter: All senders")
+    logger.info(f"   • Target Group: {GROUP_NAME or 'Auto-detect'}")
+    logger.info("")
+    
     # Load wordlist (only if word sending is enabled)
+    logger.info("📂 Loading wordlist...")
     if ENABLE_WORD_SENDING:
         wordlist = load_wordlist()
         if not wordlist:
-            logger.error("Cannot proceed without wordlist when word sending is enabled")
+            logger.error("❌ Cannot proceed without wordlist when word sending is enabled")
             return
+        logger.info(f"✅ Wordlist loaded: {len(wordlist)} words")
     else:
-        logger.info("Word sending is disabled. Skipping wordlist loading.")
+        logger.info("⏭️  Word sending is disabled. Skipping wordlist loading.")
         wordlist = []
     
     # Initialize client
+    logger.info("🔌 Connecting to Telegram...")
     if not await initialize_client():
-        logger.error("Failed to initialize client")
+        logger.error("❌ Failed to initialize client")
         return
+    logger.info("✅ Telegram client connected successfully")
     
     # Find or join group
     # Priority: 1) Find by name, 2) Try invite link, 3) Use first group from dialogs
+    logger.info("🔍 Finding target group...")
     
     if GROUP_NAME:
+        logger.info(f"   Searching for group by name: '{GROUP_NAME}'")
         await find_group_by_name(GROUP_NAME)
     
     if not group_entity and GROUP_INVITE_URL:
+        logger.info("   Trying to join group via invite link...")
         await join_group_via_invite(GROUP_INVITE_URL)
     
     # If still not found, try to get first group from dialogs
     if not group_entity:
-        logger.warning("No group entity found. Trying to find first group from dialogs...")
+        logger.warning("   Group not found by name or invite. Trying to find first group from dialogs...")
         try:
             async for dialog in client.iter_dialogs(limit=50):
                 if isinstance(dialog.entity, Channel) and not dialog.entity.broadcast:
                     group_entity = dialog.entity
-                    logger.info(f"Using first group from dialogs: {group_entity.title}")
+                    logger.info(f"✅ Using first group from dialogs: {group_entity.title}")
                     break
         except Exception as e:
-            logger.error(f"Error finding group from dialogs: {e}")
+            logger.error(f"❌ Error finding group from dialogs: {e}")
     
     if not group_entity:
-        logger.error("No group available!")
+        logger.error("❌ No group available!")
         logger.error("Options:")
         logger.error("  1. Set GROUP_NAME in .env (e.g., GROUP_NAME=My Group Name)")
         logger.error("  2. Set GROUP_INVITE_URL in .env with a valid invite link")
         logger.error("  3. Make sure you're a member of at least one group")
         return
     
+    logger.info(f"✅ Target group found: {group_entity.title} (ID: {group_entity.id})")
+    
     # Initialize OCR model
-    logger.info("Initializing OCR model...")
+    logger.info("🤖 Initializing OCR model for math challenges...")
     if not await initialize_ocr_model():
-        logger.warning("Failed to initialize OCR model, math challenge processing may not work")
+        logger.warning("⚠️  Failed to initialize OCR model, math challenge processing may not work")
+    else:
+        logger.info("✅ OCR model initialized successfully")
     
     # Register message event handler
+    logger.info("📨 Registering message event handlers...")
     client.add_event_handler(handle_new_message, events.NewMessage(chats=group_entity))
-    logger.info("Message event handler registered")
+    logger.info(f"✅ Message event handler registered for group: {group_entity.title}")
+    if MESSAGE_SENDER_USERNAME:
+        logger.info(f"   Filter: Only messages from @{MESSAGE_SENDER_USERNAME}")
+    else:
+        logger.info(f"   Filter: All senders")
     
     # Start worker thread
+    logger.info("🔄 Starting message worker thread...")
     worker_thread = threading.Thread(target=message_worker, daemon=True)
     worker_thread.start()
-    logger.info("Message worker thread started")
+    logger.info("✅ Message worker thread started")
     
     # Start bonus message loop as async task (independent, not affected by word message delays)
+    logger.info(f"💬 Starting bonus message loop (interval: {BONUS_INTERVAL}s)...")
     bonus_loop_task = asyncio.create_task(bonus_message_loop())
-    logger.info(f"Bonus message loop started (interval: {BONUS_INTERVAL}s, target: group)")
+    logger.info("✅ Bonus message loop started")
     
     # Start main loop in background (only if word sending is enabled)
     if ENABLE_WORD_SENDING:
+        logger.info("📝 Starting word sending loop...")
         main_loop_task = asyncio.create_task(main_loop())
-        logger.info("Word sending loop started")
+        logger.info("✅ Word sending loop started")
     else:
-        logger.info("Word sending is disabled. Main loop will not start.")
+        logger.info("⏭️  Word sending is disabled. Main loop will not start.")
         main_loop_task = None
+    
+    # Print ready message
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("✅ Bot is now running and ready!")
+    logger.info("=" * 60)
+    logger.info("📊 Active Features:")
+    if ENABLE_WORD_SENDING:
+        logger.info("   • Word sending: ✅ Active")
+    logger.info("   • Bonus messages: ✅ Active")
+    logger.info("   • Math challenges: ✅ Active")
+    logger.info("   • Box messages: ✅ Active")
+    logger.info("")
+    logger.info("Press Ctrl+C to stop the bot")
+    logger.info("=" * 60)
+    logger.info("")
     
     # Create a shutdown event (make it global so signal handler can access it)
     shutdown_event = asyncio.Event()
@@ -865,25 +950,32 @@ async def main():
         # Shutdown OCR executor
         global ocr_executor
         if ocr_executor:
-            logger.info("Shutting down OCR executor...")
+            logger.info("🔄 Shutting down OCR executor...")
             ocr_executor.shutdown(wait=False)  # Don't wait, just shutdown
         
         if client:
-            logger.info("Disconnecting Telegram client...")
+            logger.info("🔌 Disconnecting Telegram client...")
             try:
                 await asyncio.wait_for(client.disconnect(), timeout=2.0)
+                logger.info("✅ Telegram client disconnected")
             except asyncio.TimeoutError:
-                logger.warning("Client disconnect timed out")
+                logger.warning("⚠️  Client disconnect timed out")
             except Exception as e:
                 logger.debug(f"Error disconnecting client: {e}")
         
-        logger.info("Bot stopped")
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("🛑 Bot stopped successfully")
+        logger.info("=" * 60)
 
 
 def signal_handler(signum, frame):
     """Handle shutdown signals."""
     global running, event_loop, shutdown_event
-    logger.info(f"Received shutdown signal ({signum})")
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info(f"🛑 Received shutdown signal ({signum})")
+    logger.info("=" * 60)
     running = False
     
     # Use the global event_loop if available
@@ -913,6 +1005,12 @@ def signal_handler(signum, frame):
 
 
 if __name__ == "__main__":
+    # Print initial startup message
+    print("\n" + "=" * 60)
+    print("🤖 LevelUp Bot")
+    print("=" * 60)
+    print("Initializing...\n")
+    
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -920,10 +1018,16 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("🛑 Bot stopped by user")
+        logger.info("=" * 60)
         running = False
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error("")
+        logger.error("=" * 60)
+        logger.error(f"❌ Fatal error: {e}")
+        logger.error("=" * 60)
         running = False
     
     # Force exit to ensure process terminates
