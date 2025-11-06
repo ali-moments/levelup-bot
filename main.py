@@ -12,6 +12,71 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+# Set environment variables early to force CPU usage for ONNX Runtime
+# This must be done before importing pix2text or any ONNX-dependent libraries
+os.environ['ONNXRUNTIME_EXECUTION_PROVIDER'] = 'CPUExecutionProvider'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide CUDA devices to force CPU
+
+# Patch ONNX Runtime BEFORE importing pix2text to force CPU usage
+try:
+    import onnxruntime as ort
+    
+    # Store original functions
+    _original_get_available_providers = ort.get_available_providers
+    _original_InferenceSession = ort.InferenceSession
+    
+    def _get_available_providers_cpu_only():
+        """Return only CPU-compatible providers."""
+        providers = _original_get_available_providers()
+        # Filter to only CPU and Azure providers (both work on CPU)
+        cpu_providers = [p for p in providers if 'CPU' in p or 'Azure' in p]
+        # Always include CPUExecutionProvider as first choice
+        if 'CPUExecutionProvider' not in cpu_providers:
+            cpu_providers.insert(0, 'CPUExecutionProvider')
+        return cpu_providers
+    
+    def _InferenceSession_cpu_only(model_path, sess_options=None, providers=None, provider_options=None, **kwargs):
+        """Create InferenceSession with CPU providers only."""
+        # Force CPU providers
+        if providers is None:
+            providers = _get_available_providers_cpu_only()
+        else:
+            # Filter providers to only CPU-compatible ones
+            providers = [p for p in providers if 'CPU' in p or 'Azure' in p]
+            if not providers:
+                providers = ['CPUExecutionProvider']
+        
+        # Remove CUDA from providers if somehow it got in
+        providers = [p for p in providers if 'CUDA' not in p]
+        
+        try:
+            return _original_InferenceSession(
+                model_path,
+                sess_options=sess_options,
+                providers=providers,
+                provider_options=provider_options,
+                **kwargs
+            )
+        except ValueError as e:
+            # If still fails, try with only CPUExecutionProvider
+            if 'CUDAExecutionProvider' in str(e):
+                providers = ['CPUExecutionProvider']
+                return _original_InferenceSession(
+                    model_path,
+                    sess_options=sess_options,
+                    providers=providers,
+                    provider_options=provider_options,
+                    **kwargs
+                )
+            raise
+    
+    # Apply patches immediately
+    ort.get_available_providers = _get_available_providers_cpu_only
+    ort.InferenceSession = _InferenceSession_cpu_only
+except ImportError:
+    # onnxruntime not available yet, will patch later
+    pass
+
 from telethon import TelegramClient, errors, events
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import Channel
@@ -25,6 +90,7 @@ from constants import (
     GROUP_NAME,
     BONUS_MESSAGE,
     BONUS_INTERVAL,
+    WORD_SENDER,
 )
 
 # Configure logging
@@ -34,6 +100,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress verbose warnings from RapidOCR and other libraries
+logging.getLogger('RapidOCR').setLevel(logging.ERROR)
+logging.getLogger('cnstd').setLevel(logging.ERROR)
+logging.getLogger('transformers').setLevel(logging.ERROR)  # Suppress use_fast warnings
+logging.getLogger('optimum').setLevel(logging.ERROR)  # Suppress ONNX warnings
+logging.getLogger('optimum.onnxruntime').setLevel(logging.ERROR)
+
 # Global variables
 client: Optional[TelegramClient] = None
 event_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -41,10 +114,21 @@ wordlist: list[str] = []
 message_queue: queue.Queue = queue.Queue()
 running = True
 group_entity = None
-# Message rate: 900-1100 messages/hour
-# 900 msg/h = 4.0s delay, 1100 msg/h = 3.27s delay
-MIN_MESSAGE_DELAY = 3.27  # 1100 messages/hour
-MAX_MESSAGE_DELAY = 4.0   # 900 messages/hour
+shutdown_event: Optional[asyncio.Event] = None  # Global shutdown event
+worker_thread: Optional[threading.Thread] = None  # Worker thread reference
+
+# Message rate based on WORD_SENDER setting
+# If WORD_SENDER is True: 900-1100 messages/hour (3.27-4.0s delay)
+# If WORD_SENDER is False: 100-150 messages/hour (24-36s delay)
+if WORD_SENDER:
+    # 900 msg/h = 4.0s delay, 1100 msg/h = 3.27s delay
+    MIN_MESSAGE_DELAY = 3.27  # 1100 messages/hour
+    MAX_MESSAGE_DELAY = 4.0   # 900 messages/hour
+else:
+    # 100 msg/h = 36s delay, 150 msg/h = 24s delay
+    MIN_MESSAGE_DELAY = 24.0  # 150 messages/hour
+    MAX_MESSAGE_DELAY = 36.0  # 100 messages/hour
+
 ocr_model: Optional[Pix2Text] = None
 ocr_executor: Optional[ThreadPoolExecutor] = None  # Thread pool for blocking OCR operations
 
@@ -221,8 +305,13 @@ def message_worker():
                     logger.error(f"Error sending word message: {e}")
                 
                 # Random delay between MIN and MAX to achieve 900-1100 messages/hour
+                # Check running flag during sleep to exit quickly
                 delay = random.uniform(MIN_MESSAGE_DELAY, MAX_MESSAGE_DELAY)
-                time.sleep(delay)
+                elapsed = 0
+                while elapsed < delay and running:
+                    sleep_chunk = min(0.5, delay - elapsed)  # Check every 0.5 seconds
+                    time.sleep(sleep_chunk)
+                    elapsed += sleep_chunk
                 
             message_queue.task_done()
             
@@ -262,6 +351,9 @@ async def bonus_message_loop():
                 await send_bonus_message()
                 last_send_time = time_module.time()  # Update last send time to actual send completion
                 logger.info(f"Bonus message sent. Next in {BONUS_INTERVAL} seconds...")
+        except asyncio.CancelledError:
+            logger.info("Bonus message loop cancelled")
+            raise
         except Exception as e:
             logger.error(f"Error in bonus message loop: {e}")
             if running:
@@ -269,37 +361,115 @@ async def bonus_message_loop():
 
 
 async def initialize_ocr_model():
-    """Initialize the OCR model for math problem recognition."""
+    """Initialize the OCR model for math problem recognition - CPU only."""
     global ocr_model, ocr_executor
+    import warnings
+    import onnxruntime as ort
+    
+    # Suppress ALL warnings
+    warnings.filterwarnings('ignore')
+    
+    # Force CPU mode - ensure environment variables are set
+    os.environ['ONNXRUNTIME_EXECUTION_PROVIDER'] = 'CPUExecutionProvider'
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide CUDA devices
+    
+    # Ensure CPU patches are applied (use module-level patches if available)
     try:
-        # Initialize pix2text
-        # The library will automatically download and use the breezedeus/pix2text-mfr model
-        # when processing images with mathematical formulas
-        # Try different initialization methods for compatibility
-        try:
-            # Method 1: Initialize with formula recognition enabled
-            ocr_model = Pix2Text.from_config(dict(
-                formula=dict(
-                    model_name='breezedeus/pix2text-mfr',
-                )
-            ))
-        except:
-            try:
-                # Method 2: Simple initialization (will use default models)
-                ocr_model = Pix2Text()
-            except Exception as e2:
-                logger.error(f"Failed to initialize pix2text: {e2}")
-                return False
-        
-        # Create thread pool executor for running blocking OCR operations
-        ocr_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr")
-        
-        logger.info("OCR model (pix2text) initialized successfully")
-        logger.info("Note: The library will automatically download models from Hugging Face on first use")
-        return True
+        # Check if module-level patches exist
+        if '_get_available_providers_cpu_only' in globals() and '_InferenceSession_cpu_only' in globals():
+            # Use module-level patches
+            if not hasattr(ort, '_original_get_available_providers'):
+                ort._original_get_available_providers = ort.get_available_providers
+                ort._original_InferenceSession = ort.InferenceSession
+            ort.get_available_providers = _get_available_providers_cpu_only
+            ort.InferenceSession = _InferenceSession_cpu_only
+        else:
+            # Apply patches inline if module-level ones don't exist
+            if not hasattr(ort, '_original_get_available_providers'):
+                ort._original_get_available_providers = ort.get_available_providers
+                ort._original_InferenceSession = ort.InferenceSession
+            
+            def get_cpu_providers():
+                """Return only CPU providers."""
+                providers = ort._original_get_available_providers()
+                cpu_providers = [p for p in providers if 'CPU' in p or 'Azure' in p]
+                if not cpu_providers:
+                    cpu_providers = ['CPUExecutionProvider']
+                return cpu_providers
+            
+            def create_cpu_session(model_path, sess_options=None, providers=None, provider_options=None, **kwargs):
+                """Create InferenceSession with CPU providers only."""
+                if providers is None:
+                    providers = get_cpu_providers()
+                else:
+                    # Filter to only CPU-compatible providers
+                    providers = [p for p in providers if 'CPU' in p or 'Azure' in p]
+                    if not providers:
+                        providers = ['CPUExecutionProvider']
+                
+                # Remove any CUDA providers
+                providers = [p for p in providers if 'CUDA' not in p]
+                
+                try:
+                    return ort._original_InferenceSession(
+                        model_path,
+                        sess_options=sess_options,
+                        providers=providers,
+                        provider_options=provider_options,
+                        **kwargs
+                    )
+                except ValueError as e:
+                    # If still fails, try with only CPUExecutionProvider
+                    if 'CUDA' in str(e) or 'cuda' in str(e):
+                        providers = ['CPUExecutionProvider']
+                        return ort._original_InferenceSession(
+                            model_path,
+                            sess_options=sess_options,
+                            providers=providers,
+                            provider_options=provider_options,
+                            **kwargs
+                        )
+                    raise
+            
+            ort.get_available_providers = get_cpu_providers
+            ort.InferenceSession = create_cpu_session
     except Exception as e:
-        logger.error(f"Failed to initialize OCR model: {e}")
-        return False
+        logger.debug(f"Error applying CPU patches: {e}")
+    
+    # Initialize OCR model with CPU only
+    logger.info("Initializing OCR model with CPU only...")
+    
+    # Try different initialization methods
+    initialization_methods = [
+        # Method 1: Try with formula recognition model
+        lambda: Pix2Text.from_config(dict(
+            formula=dict(model_name='breezedeus/pix2text-mfr')
+        )),
+        # Method 2: Simple initialization
+        lambda: Pix2Text(),
+    ]
+    
+    for i, init_method in enumerate(initialization_methods, 1):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                logger.info(f"Trying OCR initialization method {i}...")
+                ocr_model = init_method()
+                ocr_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr")
+                logger.info("OCR model initialized successfully - Running on CPU")
+                return True
+        except Exception as e:
+            logger.warning(f"OCR initialization method {i} failed: {e}")
+            if i == len(initialization_methods):
+                # Last method failed, log the error
+                logger.error(f"All OCR initialization methods failed. Last error: {e}")
+                logger.warning("OCR initialization failed. Math challenge processing disabled.")
+                return False
+            continue
+    
+    # Should not reach here, but just in case
+    logger.warning("OCR initialization failed. Math challenge processing disabled.")
+    return False
 
 
 def parse_and_solve_math(text: str) -> Optional[float]:
@@ -534,7 +704,13 @@ async def main_loop():
         logger.error("Wordlist is empty. Cannot send messages.")
         return
     
-    logger.info(f"Starting main message loop ({MIN_MESSAGE_DELAY}-{MAX_MESSAGE_DELAY}s delay = 900-1100 messages/hour)...")
+    # Calculate messages per hour for logging
+    if WORD_SENDER:
+        rate_info = "900-1100 messages/hour"
+    else:
+        rate_info = "100-150 messages/hour"
+    
+    logger.info(f"Starting main message loop ({MIN_MESSAGE_DELAY}-{MAX_MESSAGE_DELAY}s delay = {rate_info})...")
     
     while running:
         try:
@@ -549,10 +725,13 @@ async def main_loop():
             
             logger.info(f"Queued word: {word}")
             
-            # Random delay between MIN and MAX to achieve 900-1100 messages/hour
+            # Random delay between MIN and MAX
             delay = random.uniform(MIN_MESSAGE_DELAY, MAX_MESSAGE_DELAY)
             await asyncio.sleep(delay)
             
+        except asyncio.CancelledError:
+            logger.info("Main loop cancelled")
+            raise
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             await asyncio.sleep(5)
@@ -560,7 +739,7 @@ async def main_loop():
 
 async def main():
     """Main async function."""
-    global running, wordlist, client, group_entity
+    global running, wordlist, client, group_entity, shutdown_event, worker_thread
     
     # Load wordlist
     wordlist = load_wordlist()
@@ -623,33 +802,97 @@ async def main():
     # Start main loop in background
     main_loop_task = asyncio.create_task(main_loop())
     
+    # Create a shutdown event (make it global so signal handler can access it)
+    shutdown_event = asyncio.Event()
+    
     try:
         # Keep running until interrupted
-        await asyncio.Event().wait()
+        await shutdown_event.wait()
     except KeyboardInterrupt:
         logger.info("Received interrupt signal, shutting down...")
+    except asyncio.CancelledError:
+        logger.info("Tasks cancelled, shutting down...")
     finally:
         running = False
-        # Wait for queue to empty
+        shutdown_event.set()  # Signal shutdown
+        
+        # Cancel all running tasks
+        logger.info("Cancelling running tasks...")
+        main_loop_task.cancel()
+        bonus_loop_task.cancel()
+        
+        # Wait for tasks to finish cancelling (with timeout)
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(main_loop_task, bonus_loop_task, return_exceptions=True),
+                timeout=2.0
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Tasks did not cancel within timeout")
+        except Exception as e:
+            logger.debug(f"Error during task cancellation: {e}")
+        
+        # Signal worker thread to stop
         message_queue.put(None)  # Shutdown signal
-        message_queue.join()
+        
+        # Wait for worker thread to finish (with timeout)
+        if worker_thread and worker_thread.is_alive():
+            logger.info("Waiting for worker thread to finish...")
+            worker_thread.join(timeout=2.0)
+            if worker_thread.is_alive():
+                logger.warning("Worker thread did not stop within timeout")
+        
+        # Don't wait for queue to empty - just clear it
+        # The worker thread should have processed the shutdown signal
         
         # Shutdown OCR executor
         global ocr_executor
         if ocr_executor:
             logger.info("Shutting down OCR executor...")
-            ocr_executor.shutdown(wait=True)
+            ocr_executor.shutdown(wait=False)  # Don't wait, just shutdown
         
         if client:
-            await client.disconnect()
+            logger.info("Disconnecting Telegram client...")
+            try:
+                await asyncio.wait_for(client.disconnect(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning("Client disconnect timed out")
+            except Exception as e:
+                logger.debug(f"Error disconnecting client: {e}")
+        
         logger.info("Bot stopped")
 
 
 def signal_handler(signum, frame):
     """Handle shutdown signals."""
-    global running
-    logger.info("Received shutdown signal")
+    global running, event_loop, shutdown_event
+    logger.info(f"Received shutdown signal ({signum})")
     running = False
+    
+    # Use the global event_loop if available
+    current_loop = event_loop
+    
+    # If event loop is running, set the shutdown event to break out of wait
+    if current_loop and current_loop.is_running() and shutdown_event:
+        # Schedule setting the shutdown event in the event loop (thread-safe)
+        def set_shutdown():
+            shutdown_event.set()
+        current_loop.call_soon_threadsafe(set_shutdown)
+        
+        # Also cancel all tasks to ensure quick shutdown
+        try:
+            tasks = [task for task in asyncio.all_tasks(current_loop) if not task.done()]
+            for task in tasks:
+                task.cancel()
+        except Exception as e:
+            logger.debug(f"Error cancelling tasks: {e}")
+    elif shutdown_event:
+        # If shutdown_event exists but loop isn't running or available,
+        # try to set it directly (this is safe if called before event loop starts)
+        try:
+            shutdown_event.set()
+        except:
+            pass
 
 
 if __name__ == "__main__":
@@ -661,8 +904,13 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
-        sys.exit(0)
+        running = False
     except Exception as e:
         logger.error(f"Fatal error: {e}")
-        sys.exit(1)
+        running = False
+    
+    # Force exit to ensure process terminates
+    # This ensures the process exits even if there are hanging threads
+    logger.info("Exiting process...")
+    sys.exit(0)
 
