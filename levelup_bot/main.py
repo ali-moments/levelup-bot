@@ -5,16 +5,10 @@ import logging
 import sys
 
 # Apply CPU patches BEFORE importing anything that uses ONNX
-# This must be done at the very top level
-import os
-os.environ['ONNXRUNTIME_EXECUTION_PROVIDER'] = 'CPUExecutionProvider'
-os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide CUDA devices to force CPU
-
-# Import and apply CPU patches
-from levelup_bot.ocr.cpu_patch import apply_cpu_patches
+from .ocr.cpu_patch import apply_cpu_patches
 apply_cpu_patches()
 
-from levelup_bot.bot import Bot
+from .bot import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -59,3 +53,4 @@ if __name__ == "__main__":
     # Force exit to ensure process terminates
     logger.info("Exiting process...")
     sys.exit(0)
+

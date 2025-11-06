@@ -76,7 +76,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    - Copy your `api_id` and `api_hash`
 
 3. **Create a wordlist file** (only required if `ENABLE_WORD_SENDING=true`):
-   - Create a file named `wordlist.txt` in the project root
+   - Create a file named `wordlist.txt` in the `data/` directory
    - Add one word per line (UTF-8 encoding)
    - Example:
      ```
@@ -139,14 +139,35 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 
 ```
 levelup_bot/
-├── main.py              # Main bot logic
-├── constants.py          # Configuration constants loaded from .env
-├── requirements.txt      # Python dependencies
-├── wordlist.txt          # List of words to send (create this file)
-├── .env                  # Environment variables (create this file)
-├── README.md             # This file
-└── venv/                 # Virtual environment (created during setup)
+├── levelup_bot/          # Main package
+│   ├── __init__.py
+│   ├── main.py          # Package entry point
+│   ├── bot.py           # Bot orchestrator
+│   ├── config/          # Configuration module
+│   ├── telegram/        # Telegram operations
+│   ├── handlers/        # Message handlers
+│   ├── services/        # Background services
+│   ├── ocr/            # OCR functionality
+│   └── utils/          # Utilities
+├── docs/                # Documentation
+│   ├── ARCHITECTURE.md
+│   ├── SETUP.md
+│   ├── CONFIGURATION.md
+│   └── API.md
+├── data/                # Data files
+│   └── wordlist.txt    # Wordlist (create this file)
+├── main.py             # Root entry point
+├── requirements.txt    # Python dependencies
+├── setup.py           # Package setup
+├── .env               # Environment variables (create this file)
+└── README.md          # This file
 ```
+
+For detailed documentation, see:
+- [Setup Guide](docs/SETUP.md) - Detailed setup instructions
+- [Architecture](docs/ARCHITECTURE.md) - Project architecture and design
+- [Configuration](docs/CONFIGURATION.md) - Configuration reference
+- [API Documentation](docs/API.md) - Internal API reference
 
 ## Technical Details
 
