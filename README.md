@@ -61,7 +61,8 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    BONUS_MESSAGE=یا زهرا
    BONUS_INTERVAL=181  # Seconds between bonus messages
 
-   # Word sender mode
+   # Word sender settings
+   ENABLE_WORD_SENDING=true  # Enable/disable word sending (true/false)
    WORD_SENDER=true  # true for fast mode (900-1100 msg/h), false for slow mode (100-150 msg/h)
    ```
 
@@ -71,7 +72,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    - Create a new application
    - Copy your `api_id` and `api_hash`
 
-3. **Create a wordlist file**:
+3. **Create a wordlist file** (only required if `ENABLE_WORD_SENDING=true`):
    - Create a file named `wordlist.txt` in the project root
    - Add one word per line (UTF-8 encoding)
    - Example:
@@ -80,6 +81,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
      word2
      word3
      ```
+   - Note: This file is only needed if word sending is enabled. If you disable word sending, you can skip this step.
 
 ## Usage
 
@@ -103,11 +105,12 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 ## How It Works
 
 ### Message Sending
-- The bot continuously sends random words from `wordlist.txt` to the configured group
-- Message rate is controlled by `WORD_SENDER` setting:
+- The bot can send random words from `wordlist.txt` to the configured group (can be disabled via `ENABLE_WORD_SENDING`)
+- When enabled, message rate is controlled by `WORD_SENDER` setting:
   - `true`: Fast mode (900-1100 messages/hour)
   - `false`: Slow mode (100-150 messages/hour)
 - Messages are queued and processed by a worker thread to avoid blocking
+- Set `ENABLE_WORD_SENDING=false` to disable word sending entirely (useful if you only want bonus messages, math challenges, or box handling)
 
 ### Bonus Messages
 - Sends a bonus message (configurable via `BONUS_MESSAGE`) every `BONUS_INTERVAL` seconds

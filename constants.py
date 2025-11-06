@@ -18,4 +18,5 @@ BONUS_MESSAGE: Final[str] = "یا زهرا"
 BONUS_INTERVAL: Final[int] = 181  # Seconds between bonus messages (3 minutes + 1 second)
 
 # Word sender settings
-WORD_SENDER: Final[bool] = os.getenv("WORD_SENDER", "true").lower() in ("true", "1", "yes")  # If True: 900-1100 msg/h, If False: 100-150 msg/h
+ENABLE_WORD_SENDING: Final[bool] = os.getenv("ENABLE_WORD_SENDING", "true").lower() in ("true", "1", "yes")  # Enable/disable word sending
+WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("false", "0", "no")  # If True: 900-1100 msg/h, If False: 100-150 msg/h

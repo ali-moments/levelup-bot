@@ -90,7 +90,8 @@ from constants import (
     GROUP_NAME,
     BONUS_MESSAGE,
     BONUS_INTERVAL,
-    WORD_SENDER,
+    ENABLE_WORD_SENDING,
+    WORD_SENDER_SLOW_MODE,
 )
 
 # Configure logging
@@ -120,7 +121,7 @@ worker_thread: Optional[threading.Thread] = None  # Worker thread reference
 # Message rate based on WORD_SENDER setting
 # If WORD_SENDER is True: 900-1100 messages/hour (3.27-4.0s delay)
 # If WORD_SENDER is False: 100-150 messages/hour (24-36s delay)
-if WORD_SENDER:
+if WORD_SENDER_SLOW_MODE:
     # 900 msg/h = 4.0s delay, 1100 msg/h = 3.27s delay
     MIN_MESSAGE_DELAY = 3.27  # 1100 messages/hour
     MAX_MESSAGE_DELAY = 4.0   # 900 messages/hour
@@ -700,12 +701,16 @@ async def main_loop():
     """Main loop that sends random words to the group."""
     global running
     
+    if not ENABLE_WORD_SENDING:
+        logger.info("Word sending is disabled. Exiting main loop.")
+        return
+    
     if not wordlist:
         logger.error("Wordlist is empty. Cannot send messages.")
         return
     
     # Calculate messages per hour for logging
-    if WORD_SENDER:
+    if WORD_SENDER_SLOW_MODE:
         rate_info = "900-1100 messages/hour"
     else:
         rate_info = "100-150 messages/hour"
@@ -741,11 +746,15 @@ async def main():
     """Main async function."""
     global running, wordlist, client, group_entity, shutdown_event, worker_thread
     
-    # Load wordlist
-    wordlist = load_wordlist()
-    if not wordlist:
-        logger.error("Cannot proceed without wordlist")
-        return
+    # Load wordlist (only if word sending is enabled)
+    if ENABLE_WORD_SENDING:
+        wordlist = load_wordlist()
+        if not wordlist:
+            logger.error("Cannot proceed without wordlist when word sending is enabled")
+            return
+    else:
+        logger.info("Word sending is disabled. Skipping wordlist loading.")
+        wordlist = []
     
     # Initialize client
     if not await initialize_client():
@@ -799,8 +808,13 @@ async def main():
     bonus_loop_task = asyncio.create_task(bonus_message_loop())
     logger.info(f"Bonus message loop started (interval: {BONUS_INTERVAL}s, target: group)")
     
-    # Start main loop in background
-    main_loop_task = asyncio.create_task(main_loop())
+    # Start main loop in background (only if word sending is enabled)
+    if ENABLE_WORD_SENDING:
+        main_loop_task = asyncio.create_task(main_loop())
+        logger.info("Word sending loop started")
+    else:
+        logger.info("Word sending is disabled. Main loop will not start.")
+        main_loop_task = None
     
     # Create a shutdown event (make it global so signal handler can access it)
     shutdown_event = asyncio.Event()
@@ -818,13 +832,16 @@ async def main():
         
         # Cancel all running tasks
         logger.info("Cancelling running tasks...")
-        main_loop_task.cancel()
-        bonus_loop_task.cancel()
+        tasks_to_cancel = [bonus_loop_task]
+        if main_loop_task:
+            tasks_to_cancel.append(main_loop_task)
+        for task in tasks_to_cancel:
+            task.cancel()
         
         # Wait for tasks to finish cancelling (with timeout)
         try:
             await asyncio.wait_for(
-                asyncio.gather(main_loop_task, bonus_loop_task, return_exceptions=True),
+                asyncio.gather(*tasks_to_cancel, return_exceptions=True),
                 timeout=2.0
             )
         except asyncio.TimeoutError:
