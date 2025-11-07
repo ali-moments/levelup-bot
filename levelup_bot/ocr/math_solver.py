@@ -17,47 +17,102 @@ def parse_and_solve_math(text: str) -> Optional[float]:
         The solution as a float, or None if parsing fails
     """
     try:
+        if not text:
+            return None
+        
         # Clean the text and extract math expression
         # Handle patterns like "12 + 3 = ?" or "12+3=?"
-        # Replace Persian operators with standard ones
-        text = text.replace('×', '*').replace('÷', '/').replace('=', '').replace('?', '').strip()
+        # Replace Persian/Arabic operators with standard ones
+        text = text.replace('×', '*').replace('÷', '/').replace('=', '').replace('?', '')
+        text = text.replace('x', '*').replace('X', '*')  # Handle 'x' as multiplication
+        text = text.strip()
         
-        # Try to find math expression pattern
-        # Match patterns like: number operator number
-        pattern = r'(\d+)\s*([+\-*/])\s*(\d+)'
+        # Remove common OCR artifacts and noise
+        # Remove letters that might be OCR mistakes (but keep operators)
+        # First, try to find the math expression pattern before cleaning too much
+        pattern = r'(\d+(?:\.\d+)?)\s*([+\-*/×÷])\s*(\d+(?:\.\d+)?)'
         match = re.search(pattern, text)
         
         if match:
-            num1 = float(match.group(1))
+            num1_str = match.group(1)
             operator = match.group(2)
-            num2 = float(match.group(3))
+            num2_str = match.group(3)
             
-            if operator == '+':
-                result = num1 + num2
-            elif operator == '-':
-                result = num1 - num2
-            elif operator == '*':
-                result = num1 * num2
-            elif operator == '/':
-                if num2 == 0:
-                    return None
-                result = num1 / num2
-            else:
-                return None
+            # Normalize operator
+            operator = operator.replace('×', '*').replace('÷', '/')
             
-            return result
-        
-        # If no pattern match, try to evaluate the entire expression safely
-        # Remove any non-math characters
-        cleaned = re.sub(r'[^\d+\-*/.() ]', '', text)
-        if cleaned:
             try:
-                result = eval(cleaned)
-                return float(result) if isinstance(result, (int, float)) else None
-            except:
-                pass
+                num1 = float(num1_str)
+                num2 = float(num2_str)
+                
+                if operator == '+':
+                    result = num1 + num2
+                elif operator == '-':
+                    result = num1 - num2
+                elif operator == '*':
+                    result = num1 * num2
+                elif operator == '/':
+                    if num2 == 0:
+                        logger.warning("Division by zero detected")
+                        return None
+                    result = num1 / num2
+                else:
+                    return None
+                
+                logger.info(f"Solved: {num1} {operator} {num2} = {result}")
+                return result
+            except ValueError:
+                logger.warning(f"Could not convert numbers: {num1_str}, {num2_str}")
         
+        # If no pattern match, try to extract and evaluate the expression
+        # Remove any non-math characters but keep operators and numbers
+        cleaned = re.sub(r'[^\d+\-*/.() ]', '', text)
+        cleaned = cleaned.strip()
+        
+        if cleaned:
+            # Try to find a valid math expression in the cleaned text
+            # Look for patterns like: number operator number
+            simple_pattern = r'(\d+(?:\.\d+)?)\s*([+\-*/])\s*(\d+(?:\.\d+)?)'
+            simple_match = re.search(simple_pattern, cleaned)
+            
+            if simple_match:
+                try:
+                    num1 = float(simple_match.group(1))
+                    operator = simple_match.group(2)
+                    num2 = float(simple_match.group(3))
+                    
+                    if operator == '+':
+                        result = num1 + num2
+                    elif operator == '-':
+                        result = num1 - num2
+                    elif operator == '*':
+                        result = num1 * num2
+                    elif operator == '/':
+                        if num2 == 0:
+                            return None
+                        result = num1 / num2
+                    else:
+                        return None
+                    
+                    logger.info(f"Solved (from cleaned text): {num1} {operator} {num2} = {result}")
+                    return result
+                except (ValueError, ZeroDivisionError):
+                    pass
+            
+            # Last resort: try to evaluate the entire cleaned expression
+            # This is less safe but might work for simple expressions
+            try:
+                # Only evaluate if it looks like a simple math expression
+                if re.match(r'^[\d+\-*/.() ]+$', cleaned) and any(op in cleaned for op in ['+', '-', '*', '/']):
+                    result = eval(cleaned)
+                    if isinstance(result, (int, float)):
+                        logger.info(f"Solved (via eval): {cleaned} = {result}")
+                        return float(result)
+            except Exception as e:
+                logger.debug(f"Eval failed for '{cleaned}': {e}")
+        
+        logger.warning(f"Could not parse math expression from text: {text}")
         return None
     except Exception as e:
-        logger.error(f"Error parsing math expression: {e}")
+        logger.error(f"Error parsing math expression: {e}", exc_info=True)
         return None

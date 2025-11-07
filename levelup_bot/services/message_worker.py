@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Optional
 
-from ..config.settings import MIN_MESSAGE_DELAY, MAX_MESSAGE_DELAY
+from ..config.settings import MIN_MESSAGE_DELAY, MAX_MESSAGE_DELAY, AUTO_DELETE_WORD_MESSAGES, DELETE_WAIT_TIME
 from ..telegram.messaging import send_message_to_group
 from telethon import TelegramClient
 from telethon.tl.types import Channel
@@ -52,16 +52,38 @@ def message_worker(
             
             if message_type == 'word':
                 # Send word message
+                sent_message = None
                 try:
                     future = asyncio.run_coroutine_threadsafe(
                         send_message_to_group(client, group_entity, message_data['message']),
                         event_loop
                     )
-                    future.result(timeout=10)  # Wait up to 10 seconds
+                    sent_message = future.result(timeout=10)  # Wait up to 10 seconds
                 except Exception as e:
                     logger.error(f"Error sending word message: {e}")
                 
+                # Auto-delete message after 1 second if enabled
+                if AUTO_DELETE_WORD_MESSAGES and sent_message:
+                    def delete_message_after_delay():
+                        """Delete message after waiting DELETE_WAIT_TIME seconds."""
+                        time.sleep(DELETE_WAIT_TIME)
+                        if running_flag.is_set() and sent_message:
+                            try:
+                                delete_future = asyncio.run_coroutine_threadsafe(
+                                    sent_message.delete(),
+                                    event_loop
+                                )
+                                delete_future.result(timeout=5)
+                                logger.debug(f"Auto-deleted word message after {DELETE_WAIT_TIME}s")
+                            except Exception as e:
+                                logger.debug(f"Could not delete message (may have been deleted already): {e}")
+                    
+                    # Start deletion in background thread
+                    deletion_thread = threading.Thread(target=delete_message_after_delay, daemon=True)
+                    deletion_thread.start()
+                
                 # Random delay between MIN and MAX to achieve target messages/hour
+                # Note: If auto-delete is enabled, the delay already accounts for the deletion wait time
                 # Check running flag during sleep to exit quickly
                 delay = random.uniform(MIN_MESSAGE_DELAY, MAX_MESSAGE_DELAY)
                 elapsed = 0

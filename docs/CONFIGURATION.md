@@ -49,12 +49,28 @@ WORD_SENDER_SLOW_MODE=false
 ### Bonus Messages
 
 ```env
+ENABLE_BONUS_MESSAGES=true
 BONUS_MESSAGE=یا زهرا
 BONUS_INTERVAL=181
 ```
 
+- **ENABLE_BONUS_MESSAGES**: Enable/disable bonus message sending (`true`/`false`, default: `true`)
 - **BONUS_MESSAGE**: Text to send as bonus message
 - **BONUS_INTERVAL**: Seconds between bonus messages (default: 181 = 3 minutes + 1 second)
+
+## Feature Toggles
+
+```env
+ENABLE_MATH_CHALLENGES=true
+ENABLE_BOX_MESSAGES=true
+```
+
+- **ENABLE_MATH_CHALLENGES**: Enable/disable math challenge processing (`true`/`false`, default: `true`)
+- **ENABLE_BOX_MESSAGES**: Enable/disable box message processing (`true`/`false`, default: `true`)
+
+These settings control whether the bot will:
+- Process and solve math challenges from images
+- Automatically click inline buttons in box messages
 
 ## Message Filtering
 
@@ -90,12 +106,17 @@ GROUP_INVITE_URL=https://t.me/+abc123def456
 GROUP_NAME=My Group Name
 
 # Bonus Messages
+ENABLE_BONUS_MESSAGES=true
 BONUS_MESSAGE=یا زهرا
 BONUS_INTERVAL=181
 
 # Word Sending
 ENABLE_WORD_SENDING=true
 WORD_SENDER_SLOW_MODE=false
+
+# Feature Toggles
+ENABLE_MATH_CHALLENGES=true
+ENABLE_BOX_MESSAGES=true
 
 # Filtering
 MESSAGE_SENDER_USERNAME=challenge_bot
@@ -111,7 +132,7 @@ GROUP_NAME=My Group
 ENABLE_WORD_SENDING=false
 ```
 
-This configuration will only send bonus messages and process challenges/boxes.
+This configuration will only send bonus messages and process challenges/boxes (if enabled).
 
 ### Slow Mode Configuration
 
@@ -125,6 +146,23 @@ WORD_SENDER_SLOW_MODE=true
 ```
 
 This sends 100-150 messages/hour instead of 900-1100.
+
+### Disable Specific Features
+
+```env
+API_ID=12345678
+API_HASH=abcdef1234567890abcdef1234567890
+SESSION_NAME=levelup_bot
+GROUP_NAME=My Group
+
+# Disable math challenges and box messages, keep only word sending and bonus messages
+ENABLE_MATH_CHALLENGES=false
+ENABLE_BOX_MESSAGES=false
+ENABLE_WORD_SENDING=true
+ENABLE_BONUS_MESSAGES=true
+```
+
+This configuration will only send words and bonus messages, but won't process math challenges or box messages.
 
 ## Environment Variable Types
 
@@ -140,6 +178,9 @@ All variables are loaded as strings and converted to appropriate types:
 - **MESSAGE_SENDER_USERNAME**: String (optional, can be empty)
 - **ENABLE_WORD_SENDING**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 - **WORD_SENDER_SLOW_MODE**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
+- **ENABLE_BONUS_MESSAGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
+- **ENABLE_MATH_CHALLENGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
+- **ENABLE_BOX_MESSAGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 
 ## Default Values
 
@@ -153,6 +194,9 @@ If a variable is not set, defaults are used:
 - **MESSAGE_SENDER_USERNAME**: `""` (empty, process all)
 - **ENABLE_WORD_SENDING**: `true`
 - **WORD_SENDER_SLOW_MODE**: `false` (fast mode)
+- **ENABLE_BONUS_MESSAGES**: `true`
+- **ENABLE_MATH_CHALLENGES**: `true`
+- **ENABLE_BOX_MESSAGES**: `true`
 
 ## Validation
 

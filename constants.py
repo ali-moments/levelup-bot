@@ -23,3 +23,4 @@ MESSAGE_SENDER_USERNAME: Final[Optional[str]] = os.getenv("MESSAGE_SENDER_USERNA
 # Word sender settings
 ENABLE_WORD_SENDING: Final[bool] = os.getenv("ENABLE_WORD_SENDING", "true").lower() in ("true", "1", "yes")  # Enable/disable word sending
 WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("false", "0", "no")  # If True: 900-1100 msg/h, If False: 100-150 msg/h
+AUTO_DELETE_WORD_MESSAGES: Final[bool] = os.getenv("AUTO_DELETE_WORD_MESSAGES", "false").lower() in ("true", "1", "yes")  # Auto-delete word messages 1 second after sending

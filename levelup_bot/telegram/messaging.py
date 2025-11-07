@@ -8,7 +8,7 @@ from telethon.tl.types import Channel
 logger = logging.getLogger(__name__)
 
 
-async def send_message_to_group(client: TelegramClient, group_entity: Channel, message: str) -> bool:
+async def send_message_to_group(client: TelegramClient, group_entity: Channel, message: str):
     """Send a message to the group.
     
     Args:
@@ -17,23 +17,23 @@ async def send_message_to_group(client: TelegramClient, group_entity: Channel, m
         message: Message text to send
         
     Returns:
-        True if successful, False otherwise
+        Message object if successful, None otherwise
     """
     try:
         if not group_entity:
             logger.error("Group entity not set")
-            return False
+            return None
         
-        await client.send_message(group_entity, message)
+        sent_message = await client.send_message(group_entity, message)
         logger.info(f"Sent message to group: {message[:50]}...")
-        return True
+        return sent_message
     except errors.FloodWaitError as e:
         logger.warning(f"Rate limited. Waiting {e.seconds} seconds...")
         await asyncio.sleep(e.seconds)
-        return False
+        return None
     except Exception as e:
         logger.error(f"Error sending message to group: {e}")
-        return False
+        return None
 
 
 async def send_bonus_message(client: TelegramClient, group_entity: Channel, bonus_message: str) -> bool:

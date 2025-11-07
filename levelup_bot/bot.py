@@ -13,8 +13,13 @@ from pix2text import Pix2Text
 
 from .config.settings import (
     ENABLE_WORD_SENDING,
-    BONUS_INTERVAL,
+    BONUS_INTERVAL_MIN,
+    BONUS_INTERVAL_MAX,
     MESSAGE_SENDER_USERNAME,
+    ENABLE_MATH_CHALLENGES,
+    ENABLE_BOX_MESSAGES,
+    ENABLE_BONUS_MESSAGES,
+    AUTO_DELETE_WORD_MESSAGES,
 )
 from .config.logging_config import setup_logging
 from .telegram.client import initialize_client
@@ -138,9 +143,16 @@ class Bot:
         if ENABLE_WORD_SENDING:
             mode = "Slow (100-150 msg/h)" if not WORD_SENDER_SLOW_MODE else "Fast (900-1100 msg/h)"
             self.logger.info(f"   • Word Sender Mode: {mode}")
-        self.logger.info(f"   • Bonus Messages: ✅ Enabled (every {BONUS_INTERVAL}s)")
-        self.logger.info(f"   • Math Challenges: ✅ Enabled")
-        self.logger.info(f"   • Box Messages: ✅ Enabled")
+            if AUTO_DELETE_WORD_MESSAGES:
+                self.logger.info(f"   • Auto-Delete Word Messages: ✅ Enabled (deletes after 1s)")
+            else:
+                self.logger.info(f"   • Auto-Delete Word Messages: ❌ Disabled")
+        if ENABLE_BONUS_MESSAGES:
+            self.logger.info(f"   • Bonus Messages: ✅ Enabled (random interval: {BONUS_INTERVAL_MIN}-{BONUS_INTERVAL_MAX}s)")
+        else:
+            self.logger.info(f"   • Bonus Messages: ❌ Disabled")
+        self.logger.info(f"   • Math Challenges: {'✅ Enabled' if ENABLE_MATH_CHALLENGES else '❌ Disabled'}")
+        self.logger.info(f"   • Box Messages: {'✅ Enabled' if ENABLE_BOX_MESSAGES else '❌ Disabled'}")
         if MESSAGE_SENDER_USERNAME:
             self.logger.info(f"   • Message Filter: @{MESSAGE_SENDER_USERNAME}")
         else:
@@ -160,12 +172,15 @@ class Bot:
         self.worker_thread.start()
         self.logger.info("✅ Message worker thread started")
         
-        # Start bonus message loop as async task
-        self.logger.info(f"💬 Starting bonus message loop (interval: {BONUS_INTERVAL}s)...")
-        self.bonus_loop_task = asyncio.create_task(
-            bonus_message_loop(self.client, self.group_entity, self.running)
-        )
-        self.logger.info("✅ Bonus message loop started")
+        # Start bonus message loop as async task (only if enabled)
+        if ENABLE_BONUS_MESSAGES:
+            self.logger.info(f"💬 Starting bonus message loop (random interval: {BONUS_INTERVAL_MIN}-{BONUS_INTERVAL_MAX}s)...")
+            self.bonus_loop_task = asyncio.create_task(
+                bonus_message_loop(self.client, self.group_entity, self.running)
+            )
+            self.logger.info("✅ Bonus message loop started")
+        else:
+            self.logger.info("⏭️  Bonus messages are disabled. Bonus message loop will not start.")
         
         # Start main loop in background (only if word sending is enabled)
         if ENABLE_WORD_SENDING:
@@ -185,9 +200,20 @@ class Bot:
         self.logger.info("📊 Active Features:")
         if ENABLE_WORD_SENDING:
             self.logger.info("   • Word sending: ✅ Active")
-        self.logger.info("   • Bonus messages: ✅ Active")
-        self.logger.info("   • Math challenges: ✅ Active")
-        self.logger.info("   • Box messages: ✅ Active")
+        else:
+            self.logger.info("   • Word sending: ❌ Disabled")
+        if ENABLE_BONUS_MESSAGES:
+            self.logger.info("   • Bonus messages: ✅ Active")
+        else:
+            self.logger.info("   • Bonus messages: ❌ Disabled")
+        if ENABLE_MATH_CHALLENGES:
+            self.logger.info("   • Math challenges: ✅ Active")
+        else:
+            self.logger.info("   • Math challenges: ❌ Disabled")
+        if ENABLE_BOX_MESSAGES:
+            self.logger.info("   • Box messages: ✅ Active")
+        else:
+            self.logger.info("   • Box messages: ❌ Disabled")
         self.logger.info("")
         self.logger.info("Press Ctrl+C to stop the bot")
         self.logger.info("=" * 60)
