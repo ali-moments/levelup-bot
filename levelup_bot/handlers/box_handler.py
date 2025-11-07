@@ -4,6 +4,7 @@ import logging
 import asyncio
 from telethon import TelegramClient
 from telethon.tl.types import Message
+from telethon.errors import PersistentTimestampOutdatedError
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,17 @@ async def process_box_message(client: TelegramClient, message: Message):
                                 clicked = True
                                 # Small delay between clicks to avoid rate limiting
                                 await asyncio.sleep(0.5)
+                            except PersistentTimestampOutdatedError:
+                                logger.warning(f"⚠️  PersistentTimestampOutdatedError when clicking button, syncing session...")
+                                try:
+                                    await client.catch_up()
+                                    logger.info("✅ Session synced, retrying button click...")
+                                    await message.click(data=button.data)
+                                    clicked = True
+                                    await asyncio.sleep(0.5)
+                                except Exception as retry_error:
+                                    logger.debug(f"Failed to click button by data after sync: {retry_error}")
+                                    pass
                             except Exception as e:
                                 logger.debug(f"Failed to click button by data: {e}")
                                 pass
@@ -67,6 +79,17 @@ async def process_box_message(client: TelegramClient, message: Message):
                                 clicked = True
                                 # Small delay between clicks to avoid rate limiting
                                 await asyncio.sleep(0.5)
+                            except PersistentTimestampOutdatedError:
+                                logger.warning(f"⚠️  PersistentTimestampOutdatedError when clicking button, syncing session...")
+                                try:
+                                    await client.catch_up()
+                                    logger.info("✅ Session synced, retrying button click...")
+                                    await message.click(row_index, button_index)
+                                    clicked = True
+                                    await asyncio.sleep(0.5)
+                                except Exception as retry_error:
+                                    logger.debug(f"Failed to click button by index after sync: {retry_error}")
+                                    pass
                             except Exception as e:
                                 logger.debug(f"Failed to click button by index: {e}")
                                 pass
@@ -78,6 +101,17 @@ async def process_box_message(client: TelegramClient, message: Message):
                                 clicked = True
                                 # Small delay between clicks to avoid rate limiting
                                 await asyncio.sleep(0.5)
+                            except PersistentTimestampOutdatedError:
+                                logger.warning(f"⚠️  PersistentTimestampOutdatedError when clicking button, syncing session...")
+                                try:
+                                    await client.catch_up()
+                                    logger.info("✅ Session synced, retrying button click...")
+                                    await message.click(data=button.button.data)
+                                    clicked = True
+                                    await asyncio.sleep(0.5)
+                                except Exception as retry_error:
+                                    logger.debug(f"Failed to click nested button after sync: {retry_error}")
+                                    pass
                             except Exception as e:
                                 logger.debug(f"Failed to click nested button: {e}")
                                 pass
@@ -103,6 +137,22 @@ async def process_box_message(client: TelegramClient, message: Message):
                                     ))
                                     clicked = True
                                     await asyncio.sleep(0.5)
+                            except PersistentTimestampOutdatedError:
+                                logger.warning(f"⚠️  PersistentTimestampOutdatedError when clicking button, syncing session...")
+                                try:
+                                    await client.catch_up()
+                                    logger.info("✅ Session synced, retrying button click...")
+                                    if peer:
+                                        result = await client(GetBotCallbackAnswerRequest(
+                                            peer=peer,
+                                            msg_id=message.id,
+                                            data=button.data
+                                        ))
+                                        clicked = True
+                                        await asyncio.sleep(0.5)
+                                except Exception as retry_error:
+                                    logger.debug(f"Failed to click button via client request after sync: {retry_error}")
+                                    pass
                             except Exception as e:
                                 logger.debug(f"Failed to click button via client request: {e}")
                                 pass

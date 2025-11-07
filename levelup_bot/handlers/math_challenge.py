@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 from telethon import TelegramClient
 from telethon.tl.types import Message
+from telethon.errors import PersistentTimestampOutdatedError
 from pix2text import Pix2Text
 from concurrent.futures import ThreadPoolExecutor
 
@@ -53,7 +54,14 @@ async def process_math_challenge(
         temp_file.close()
         
         try:
-            await client.download_media(message, temp_file.name)
+            try:
+                await client.download_media(message, temp_file.name)
+            except PersistentTimestampOutdatedError:
+                logger.warning("   ⚠️  PersistentTimestampOutdatedError when downloading, syncing session...")
+                await client.catch_up()
+                logger.info("   ✅ Session synced, retrying download...")
+                await client.download_media(message, temp_file.name)
+            
             file_size = os.path.getsize(temp_file.name) if os.path.exists(temp_file.name) else 0
             logger.info(f"   ✅ Image downloaded successfully")
             logger.info(f"      File: {temp_file.name}")
@@ -130,7 +138,13 @@ async def process_math_challenge(
                 reply_text = str(int(answer) if answer.is_integer() else answer)
                 logger.info(f"   ✅ Solution found: {extracted_text} = {reply_text}")
                 logger.info(f"   📤 Sending reply...")
-                await message.reply(reply_text)
+                try:
+                    await message.reply(reply_text)
+                except PersistentTimestampOutdatedError:
+                    logger.warning("   ⚠️  PersistentTimestampOutdatedError when replying, syncing session...")
+                    await client.catch_up()
+                    logger.info("   ✅ Session synced, retrying reply...")
+                    await message.reply(reply_text)
                 logger.info(f"   ✅ Successfully replied with answer: {reply_text}")
                 logger.info("=" * 60)
             else:

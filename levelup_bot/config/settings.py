@@ -27,7 +27,7 @@ MESSAGE_SENDER_USERNAME: Final[Optional[str]] = os.getenv("MESSAGE_SENDER_USERNA
 
 # Word sender settings
 ENABLE_WORD_SENDING: Final[bool] = os.getenv("ENABLE_WORD_SENDING", "true").lower() in ("true", "1", "yes")  # Enable/disable word sending
-WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("false", "0", "no")  # If True: 900-1100 msg/h, If False: 100-150 msg/h
+WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("true", "1", "yes")  # If True: 900-1100 msg/h, If False: 100-150 msg/h
 AUTO_DELETE_WORD_MESSAGES: Final[bool] = os.getenv("AUTO_DELETE_WORD_MESSAGES", "false").lower() in ("true", "1", "yes")  # Auto-delete word messages 1 second after sending
 
 # Feature toggles
@@ -43,13 +43,15 @@ ENABLE_BONUS_MESSAGES: Final[bool] = os.getenv("ENABLE_BONUS_MESSAGES", "true").
 DELETE_WAIT_TIME: Final[float] = 1.0  # Seconds to wait before deleting message
 
 if WORD_SENDER_SLOW_MODE:
-    # 900 msg/h = 4.0s delay, 1100 msg/h = 3.27s delay
-    base_min_delay = 3.27  # 1100 messages/hour
-    base_max_delay = 4.0   # 900 messages/hour
-else:
     # 100 msg/h = 36s delay, 150 msg/h = 24s delay
     base_min_delay = 24.0  # 150 messages/hour
     base_max_delay = 36.0  # 100 messages/hour
+else:
+    # 900 msg/h = 4.0s delay, 1100 msg/h = 3.27s delay
+    base_min_delay = 3.27  # 1100 messages/hour
+    base_max_delay = 4.0   # 900 messages/hour
+
+    
 
 # Adjust delays if auto-delete is enabled (subtract deletion wait time)
 if AUTO_DELETE_WORD_MESSAGES:
