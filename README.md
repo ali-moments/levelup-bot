@@ -117,10 +117,10 @@ python schedule_bonus.py
 This script will:
 - Schedule the first message 1 minute after running
 - Schedule subsequent messages with random 3-5 minute intervals (cumulative)
-- Continue scheduling until 24 hours are covered (~360 messages)
+- Continue scheduling until 100 messages are scheduled (Telegram rate limit)
 - Exit immediately after scheduling (no waiting)
 
-The messages will be sent automatically by Telegram at the scheduled times. Run this script once per day.
+The messages will be sent automatically by Telegram at the scheduled times. Run this script once per day (or more frequently if you need more than 100 messages).
 
 ## How It Works
 
