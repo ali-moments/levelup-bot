@@ -122,16 +122,67 @@ class Bot:
             self.logger.info("✅ OCR model initialized successfully")
         
         # Register message event handler
+        print("\n" + "=" * 60)
+        print("[DEBUG] REGISTERING MESSAGE EVENT HANDLER")
+        print("=" * 60)
+        
+        # Verify client is connected before registering
+        is_connected = self.client.is_connected()
+        print(f"[DEBUG] Client connected before registration: {is_connected}")
+        if not is_connected:
+            print("[DEBUG] ⚠️  WARNING: Client is not connected! Event handler may not work.")
+            self.logger.warning("Client is not connected when registering event handler")
+        
         self.logger.info("📨 Registering message event handlers...")
-        self.client.add_event_handler(
-            lambda event: handle_new_message(event, self.client, self.group_entity, self.ocr_model, self.ocr_executor),
-            events.NewMessage(chats=self.group_entity)
-        )
-        self.logger.info(f"✅ Message event handler registered for group: {self.group_entity.title}")
+        print(f"[DEBUG] Group entity: {self.group_entity.title if self.group_entity else None} (ID: {self.group_entity.id if self.group_entity else None})")
+        print(f"[DEBUG] OCR model available: {self.ocr_model is not None}")
+        print(f"[DEBUG] OCR executor available: {self.ocr_executor is not None}")
+        
+        # Create a proper async wrapper function for better debugging
+        async def message_handler_wrapper(event):
+            """Wrapper function for message handler with debug output."""
+            print("[DEBUG] Event handler wrapper called - routing to handle_new_message")
+            await handle_new_message(event, self.client, self.group_entity, self.ocr_model, self.ocr_executor)
+        
+        # Register the event handler
+        print("[DEBUG] Calling client.add_event_handler...")
+        try:
+            self.client.add_event_handler(
+                message_handler_wrapper,
+                events.NewMessage(chats=self.group_entity)
+            )
+            print("[DEBUG] ✅ Event handler registered successfully")
+            self.logger.info(f"✅ Message event handler registered for group: {self.group_entity.title}")
+        except Exception as e:
+            print(f"[DEBUG] ❌ ERROR registering event handler: {e}")
+            self.logger.error(f"Failed to register event handler: {e}")
+            import traceback
+            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
+            return False
+        
+        # Verify handler was registered
+        try:
+            handlers = self.client.list_event_handlers()
+            print(f"[DEBUG] Total event handlers registered: {len(handlers)}")
+            # Check if our handler is in the list
+            handler_found = any(
+                hasattr(h, '__name__') and 'message_handler_wrapper' in str(h) 
+                or hasattr(h, '__qualname__') and 'message_handler_wrapper' in str(h)
+                for h, _ in handlers
+            )
+            print(f"[DEBUG] Message handler found in registered handlers: {handler_found}")
+        except Exception as e:
+            print(f"[DEBUG] Could not verify handler registration: {e}")
+        
         if MESSAGE_SENDER_USERNAME:
+            print(f"[DEBUG] Filter: Only messages from @{MESSAGE_SENDER_USERNAME}")
             self.logger.info(f"   Filter: Only messages from @{MESSAGE_SENDER_USERNAME}")
         else:
+            print("[DEBUG] Filter: All senders")
             self.logger.info(f"   Filter: All senders")
+        
+        print("[DEBUG] EVENT HANDLER REGISTRATION COMPLETED")
+        print("=" * 60 + "\n")
         
         return True
     

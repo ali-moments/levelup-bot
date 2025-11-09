@@ -29,11 +29,14 @@ Configuration constants loaded from environment variables.
 - `SESSION_NAME`: Session file name
 - `GROUP_INVITE_URL`: Group invite URL
 - `GROUP_NAME`: Group name
-- `BONUS_MESSAGE`: Bonus message text
-- `BONUS_INTERVAL`: Bonus message interval (seconds)
+- `BONUS_MESSAGE`: Bonus message text (from env var, default: "یا زهرا")
+- `BONUS_INTERVAL_MIN`: Minimum bonus message interval (seconds, default: 181)
+- `BONUS_INTERVAL_MAX`: Maximum bonus message interval (seconds, default: 300)
+- `BONUS_INTERVAL`: Deprecated, kept for backward compatibility
 - `MESSAGE_SENDER_USERNAME`: Optional sender filter
 - `ENABLE_WORD_SENDING`: Enable word sending flag
-- `WORD_SENDER_SLOW_MODE`: Slow mode flag
+- `WORD_SENDER_SLOW_MODE`: Slow mode flag (true = 100-150 msg/h, false = 900-1100 msg/h)
+- `AUTO_DELETE_WORD_MESSAGES`: Auto-delete word messages flag
 - `MIN_MESSAGE_DELAY`: Minimum delay between messages
 - `MAX_MESSAGE_DELAY`: Maximum delay between messages
 

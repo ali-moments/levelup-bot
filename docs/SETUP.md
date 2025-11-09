@@ -64,10 +64,10 @@ GROUP_NAME=Your Group Name
 
 # Optional settings
 BONUS_MESSAGE=یا زهرا
-BONUS_INTERVAL=181
 MESSAGE_SENDER_USERNAME=
 ENABLE_WORD_SENDING=true
 WORD_SENDER_SLOW_MODE=false
+AUTO_DELETE_WORD_MESSAGES=false
 ```
 
 ## Step 6: Prepare Wordlist (Optional)

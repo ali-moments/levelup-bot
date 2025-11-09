@@ -34,9 +34,9 @@ async def word_sender_loop(
     # Calculate messages per hour for logging
     from ..config.settings import WORD_SENDER_SLOW_MODE
     if WORD_SENDER_SLOW_MODE:
-        rate_info = "900-1100 messages/hour"
-    else:
         rate_info = "100-150 messages/hour"
+    else:
+        rate_info = "900-1100 messages/hour"
     
     logger.info(f"Starting main message loop ({MIN_MESSAGE_DELAY}-{MAX_MESSAGE_DELAY}s delay = {rate_info})...")
     

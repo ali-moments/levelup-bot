@@ -7,7 +7,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 - **Automated Word Sending**: Sends random words from a wordlist to a Telegram group at configurable intervals
   - Fast mode: 900-1100 messages/hour (3.27-4.0s delay)
   - Slow mode: 100-150 messages/hour (24-36s delay)
-- **Bonus Messages**: Sends periodic bonus messages at fixed intervals (default: every 181 seconds)
+- **Bonus Messages**: Sends periodic bonus messages with random intervals (3-5 minutes, 181-300 seconds)
 - **Math Challenge Solver**: Automatically detects and solves math challenges from images using OCR
   - Downloads images from challenge messages
   - Extracts text using Pix2Text OCR
@@ -58,8 +58,8 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    GROUP_NAME=Your Group Name  # Optional: used to find group by name
 
    # Bonus message settings
-   BONUS_MESSAGE=یا زهرا
-   BONUS_INTERVAL=181  # Seconds between bonus messages
+   BONUS_MESSAGE=یا زهرا  # Bonus message text (default: "یا زهرا")
+   # Note: Bonus messages use random intervals (181-300 seconds, 3-5 minutes)
 
    # Message handler settings
    MESSAGE_SENDER_USERNAME=  # Optional: only process challenge/box messages from this username (empty = process all)
@@ -67,6 +67,7 @@ A Telegram bot that automatically sends messages to a group, processes math chal
    # Word sender settings
    ENABLE_WORD_SENDING=true  # Enable/disable word sending (true/false)
    WORD_SENDER_SLOW_MODE=false  # false for fast mode (900-1100 msg/h), true for slow mode (100-150 msg/h)
+   AUTO_DELETE_WORD_MESSAGES=false  # Auto-delete word messages 1 second after sending (true/false)
    ```
 
 2. **Get Telegram API credentials**:
@@ -105,6 +106,22 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 
 4. **Stop the bot**: Press `Ctrl+C` to gracefully shutdown
 
+### Scheduling Bonus Messages (Alternative)
+
+Instead of running the bot continuously, you can use the `schedule_bonus.py` script to schedule bonus messages for 24 hours ahead using Telegram's native scheduled message feature:
+
+```bash
+python schedule_bonus.py
+```
+
+This script will:
+- Schedule the first message 1 minute after running
+- Schedule subsequent messages with random 3-5 minute intervals (cumulative)
+- Continue scheduling until 24 hours are covered (~360 messages)
+- Exit immediately after scheduling (no waiting)
+
+The messages will be sent automatically by Telegram at the scheduled times. Run this script once per day.
+
 ## How It Works
 
 ### Message Sending
@@ -116,9 +133,10 @@ A Telegram bot that automatically sends messages to a group, processes math chal
 - Set `ENABLE_WORD_SENDING=false` to disable word sending entirely (useful if you only want bonus messages, math challenges, or box handling)
 
 ### Bonus Messages
-- Sends a bonus message (configurable via `BONUS_MESSAGE`) every `BONUS_INTERVAL` seconds
+- Sends a bonus message (configurable via `BONUS_MESSAGE`) with random intervals
 - Runs independently of word messages
-- Default interval: 181 seconds (3 minutes + 1 second)
+- Interval: Random between 181-300 seconds (3-5 minutes) to avoid detection patterns
+- Uses cryptographically secure randomization for unpredictability
 
 ### Math Challenge Processing
 - Monitors messages in the target group (from all senders by default, or from a specific sender if `MESSAGE_SENDER_USERNAME` is set)
@@ -157,6 +175,7 @@ levelup_bot/
 ├── data/                # Data files
 │   └── wordlist.txt    # Wordlist (create this file)
 ├── main.py             # Root entry point
+├── schedule_bonus.py   # Script to schedule bonus messages for 24 hours
 ├── requirements.txt    # Python dependencies
 ├── setup.py           # Package setup
 ├── .env               # Environment variables (create this file)

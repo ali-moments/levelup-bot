@@ -39,24 +39,29 @@ Priority:
 ```env
 ENABLE_WORD_SENDING=true
 WORD_SENDER_SLOW_MODE=false
+AUTO_DELETE_WORD_MESSAGES=false
 ```
 
 - **ENABLE_WORD_SENDING**: Enable/disable word sending (`true`/`false`)
 - **WORD_SENDER_SLOW_MODE**: 
   - `false`: Fast mode (900-1100 messages/hour, 3.27-4.0s delay)
   - `true`: Slow mode (100-150 messages/hour, 24-36s delay)
+- **AUTO_DELETE_WORD_MESSAGES**: Auto-delete word messages 1 second after sending (`true`/`false`, default: `false`)
+  - When enabled, word messages are automatically deleted 1 second after being sent
+  - Message delays are automatically adjusted to maintain the same effective rate
+  - Useful for keeping chat history clean while maintaining message rate
 
 ### Bonus Messages
 
 ```env
 ENABLE_BONUS_MESSAGES=true
 BONUS_MESSAGE=یا زهرا
-BONUS_INTERVAL=181
 ```
 
 - **ENABLE_BONUS_MESSAGES**: Enable/disable bonus message sending (`true`/`false`, default: `true`)
-- **BONUS_MESSAGE**: Text to send as bonus message
-- **BONUS_INTERVAL**: Seconds between bonus messages (default: 181 = 3 minutes + 1 second)
+- **BONUS_MESSAGE**: Text to send as bonus message (default: `"یا زهرا"`)
+
+**Note**: Bonus messages use random intervals between 3-5 minutes (181-300 seconds). The interval is randomly selected for each message to avoid detection patterns. The old `BONUS_INTERVAL` setting is deprecated and no longer used.
 
 ## Feature Toggles
 
@@ -108,11 +113,12 @@ GROUP_NAME=My Group Name
 # Bonus Messages
 ENABLE_BONUS_MESSAGES=true
 BONUS_MESSAGE=یا زهرا
-BONUS_INTERVAL=181
+# Note: Bonus messages use random intervals (181-300 seconds, 3-5 minutes)
 
 # Word Sending
 ENABLE_WORD_SENDING=true
 WORD_SENDER_SLOW_MODE=false
+AUTO_DELETE_WORD_MESSAGES=false
 
 # Feature Toggles
 ENABLE_MATH_CHALLENGES=true
@@ -174,10 +180,10 @@ All variables are loaded as strings and converted to appropriate types:
 - **GROUP_INVITE_URL**: String
 - **GROUP_NAME**: String
 - **BONUS_MESSAGE**: String
-- **BONUS_INTERVAL**: Integer (seconds)
 - **MESSAGE_SENDER_USERNAME**: String (optional, can be empty)
 - **ENABLE_WORD_SENDING**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 - **WORD_SENDER_SLOW_MODE**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
+- **AUTO_DELETE_WORD_MESSAGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 - **ENABLE_BONUS_MESSAGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 - **ENABLE_MATH_CHALLENGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
 - **ENABLE_BOX_MESSAGES**: Boolean (`true`/`false`, `1`/`0`, `yes`/`no`)
@@ -190,10 +196,11 @@ If a variable is not set, defaults are used:
 - **GROUP_INVITE_URL**: `"https://t.me/+6p9Y15Lhw9I4ODFk"`
 - **GROUP_NAME**: `"GROUP_NAME"`
 - **BONUS_MESSAGE**: `"یا زهرا"`
-- **BONUS_INTERVAL**: `181`
+- **Bonus interval**: Random between 181-300 seconds (3-5 minutes)
 - **MESSAGE_SENDER_USERNAME**: `""` (empty, process all)
 - **ENABLE_WORD_SENDING**: `true`
 - **WORD_SENDER_SLOW_MODE**: `false` (fast mode)
+- **AUTO_DELETE_WORD_MESSAGES**: `false`
 - **ENABLE_BONUS_MESSAGES**: `true`
 - **ENABLE_MATH_CHALLENGES**: `true`
 - **ENABLE_BOX_MESSAGES**: `true`

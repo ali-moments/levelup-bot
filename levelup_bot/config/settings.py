@@ -16,7 +16,7 @@ GROUP_INVITE_URL: Final[str] = os.getenv("GROUP_INVITE_URL", "https://t.me/+6p9Y
 GROUP_NAME: Final[str] = os.getenv("GROUP_NAME", "کودکسالان سیرک V.2")  # Optional: group name to find from dialogs
 
 # Bonus message settings
-BONUS_MESSAGE: Final[str] = "یا زهرا"
+BONUS_MESSAGE: Final[str] = os.getenv("BONUS_MESSAGE", "یا زهرا")
 BONUS_INTERVAL_MIN: Final[int] = 181  # Minimum seconds between bonus messages (3 minutes + 1 second)
 BONUS_INTERVAL_MAX: Final[int] = 300  # Maximum seconds between bonus messages (5 minutes)
 # Note: BONUS_INTERVAL is kept for backward compatibility but will be replaced by random intervals
@@ -27,7 +27,7 @@ MESSAGE_SENDER_USERNAME: Final[Optional[str]] = os.getenv("MESSAGE_SENDER_USERNA
 
 # Word sender settings
 ENABLE_WORD_SENDING: Final[bool] = os.getenv("ENABLE_WORD_SENDING", "true").lower() in ("true", "1", "yes")  # Enable/disable word sending
-WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("true", "1", "yes")  # If True: 900-1100 msg/h, If False: 100-150 msg/h
+WORD_SENDER_SLOW_MODE: Final[bool] = os.getenv("WORD_SENDER_SLOW_MODE", "true").lower() in ("true", "1", "yes")  # If True: 100-150 msg/h, If False: 900-1100 msg/h
 AUTO_DELETE_WORD_MESSAGES: Final[bool] = os.getenv("AUTO_DELETE_WORD_MESSAGES", "false").lower() in ("true", "1", "yes")  # Auto-delete word messages 1 second after sending
 
 # Feature toggles
