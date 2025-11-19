@@ -110,6 +110,23 @@ async def process_math_challenge(
             logger.info(f"      File: {temp_file.name}")
             logger.info(f"      Size: {file_size / 1024:.2f} KB")
             
+            # Validate image file before processing
+            try:
+                from PIL import Image
+                # Verify it's a valid image (verify() consumes the file, so we need to reopen)
+                with Image.open(temp_file.name) as img:
+                    img.verify()
+                # Reopen for actual use (verify() closes the file)
+                with Image.open(temp_file.name) as img:
+                    img.load()  # Load the image to ensure it's readable
+                print("[DEBUG] ✅ Image file is valid")
+            except Exception as img_error:
+                print(f"[DEBUG] ❌ Invalid or corrupted image file: {img_error}")
+                logger.error(f"   ❌ Invalid or corrupted image file: {img_error}")
+                logger.info("=" * 60)
+                print("=" * 60)
+                return
+            
             # Use OCR to extract text
             if not ocr_model or not ocr_executor:
                 print("[DEBUG] ❌ OCR model or executor not initialized")

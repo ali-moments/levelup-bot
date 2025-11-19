@@ -20,11 +20,37 @@ def parse_and_solve_math(text: str) -> Optional[float]:
         if not text:
             return None
         
+        # Handle LaTeX array/matrix notation
+        # Pattern: \begin{array} ... \end{array} with numbers
+        latex_array_pattern = r'\\begin\{array\}.*?\\end\{array\}'
+        if re.search(latex_array_pattern, text, re.DOTALL):
+            logger.debug("Detected LaTeX array notation, attempting to parse...")
+            # Extract all numbers from the array
+            numbers = re.findall(r'\{(\d+)\}', text)
+            if numbers:
+                # Convert to integers
+                nums = [int(n) for n in numbers if n.isdigit()]
+                if nums:
+                    # For simple arrays, try common operations
+                    # If 2 numbers: add them
+                    # If 4+ numbers: sum all
+                    if len(nums) == 2:
+                        result = nums[0] + nums[1]
+                        logger.info(f"Solved LaTeX array (2 numbers): {nums[0]} + {nums[1]} = {result}")
+                        return float(result)
+                    elif len(nums) >= 2:
+                        result = sum(nums)
+                        logger.info(f"Solved LaTeX array (sum of {len(nums)} numbers): {nums} = {result}")
+                        return float(result)
+        
         # Clean the text and extract math expression
         # Handle patterns like "12 + 3 = ?" or "12+3=?"
         # Replace Persian/Arabic operators with standard ones
         text = text.replace('×', '*').replace('÷', '/').replace('=', '').replace('?', '')
         text = text.replace('x', '*').replace('X', '*')  # Handle 'x' as multiplication
+        # Remove LaTeX markers if present
+        text = re.sub(r'\$\$', '', text)  # Remove $$ markers
+        text = re.sub(r'\\begin\{array\}.*?\\end\{array\}', '', text, flags=re.DOTALL)  # Remove array blocks
         text = text.strip()
         
         # Remove common OCR artifacts and noise
